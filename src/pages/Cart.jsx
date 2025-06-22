@@ -1,63 +1,237 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { 
+  getProductById,
+  validateCoupon,
+  createOrder,
+  getShippingMethods
+} from '../api/wordpressAPI';
 
 export default function Cart() {
-  // Demo cart items state
-  const [cartItems, setCartItems] = useState([
-    { 
-      id: 1, 
-      name: 'Wireless Bluetooth Headphones', 
-      price: 129.99, 
-      quantity: 1,
-      image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80',
-      color: 'Black',
-      size: 'Standard'
-    },
-    { 
-      id: 2, 
-      name: 'Smart Fitness Watch Pro', 
-      price: 199.99, 
-      quantity: 2,
-      image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80',
-      color: 'Midnight Blue',
-      size: 'Medium'
-    },
-  ]);
-
+  // State for cart items
+  const [cartItems, setCartItems] = useState([]);
   const [promoCode, setPromoCode] = useState('');
-  const [discount, setDiscount] = useState(0);
+  const [couponDetails, setCouponDetails] = useState(null);
   const [isApplying, setIsApplying] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [shippingMethods, setShippingMethods] = useState([]);
+  const [selectedShipping, setSelectedShipping] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Load cart from localStorage on component mount
+  useEffect(() => {
+    const fetchCartData = async () => {
+      try {
+        // Load cart from localStorage
+        const savedCart = JSON.parse(localStorage.getItem('cart')) || [];
+        
+        // Enrich cart items with product details from API
+        const enrichedCart = await Promise.all(
+          savedCart.map(async (item) => {
+            try {
+              const product = await getProductById(item.id);
+              return {
+                ...item,
+                name: product.data.name,
+                price: parseFloat(product.data.price),
+                image: product.data.images[0]?.src || '/images/placeholder.jpg',
+                stock_status: product.data.stock_status,
+                sku: product.data.sku || 'N/A'
+              };
+            } catch (err) {
+              console.error(`Error fetching product ${item.id}:`, err);
+              return item; // Return the item without enrichment if API fails
+            }
+          })
+        );
+        
+        setCartItems(enrichedCart);
+        
+        // Fetch shipping methods
+        const shippingResponse = await getShippingMethods();
+        setShippingMethods(shippingResponse.data);
+        if (shippingResponse.data.length > 0) {
+          setSelectedShipping(shippingResponse.data[0]);
+        }
+        
+        setIsLoading(false);
+      } catch (err) {
+        console.error('Error initializing cart:', err);
+        setError('Failed to load cart data');
+        setIsLoading(false);
+      }
+    };
+
+    fetchCartData();
+  }, []);
+
+  // Update localStorage whenever cart changes
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      // Save only necessary data to localStorage
+      const simplifiedCart = cartItems.map(item => ({
+        id: item.id,
+        quantity: item.quantity,
+        color: item.color,
+        size: item.size
+      }));
+      localStorage.setItem('cart', JSON.stringify(simplifiedCart));
+    }
+  }, [cartItems]);
 
   const handleQuantityChange = (id, qty) => {
     setCartItems(items =>
-      items.map(item => (item.id === id ? { ...item, quantity: qty } : item))
+      items.map(item => 
+        item.id === id ? { ...item, quantity: Math.max(1, qty) } : item
+      )
     );
   };
 
   const handleRemove = (id) => {
-    setCartItems(items => items.filter(item => item.id !== id));
+    const newCart = cartItems.filter(item => item.id !== id);
+    setCartItems(newCart);
+    
+    if (newCart.length === 0) {
+      localStorage.removeItem('cart');
+    }
   };
 
-  const applyPromoCode = () => {
-    if (promoCode.trim() === '') return;
+  const applyPromoCode = async () => {
+    if (!promoCode.trim()) return;
     
     setIsApplying(true);
-    setTimeout(() => {
-      if (promoCode.toUpperCase() === 'SAVE15') {
-        setDiscount(0.15);
+    setIsSuccess(false);
+    setCouponDetails(null);
+    
+    try {
+      const response = await validateCoupon(promoCode);
+      if (response.data.length > 0) {
+        const coupon = response.data[0];
+        setCouponDetails({
+          code: coupon.code,
+          description: coupon.description,
+          discount_type: coupon.discount_type,
+          amount: coupon.amount
+        });
         setIsSuccess(true);
       } else {
         setIsSuccess(false);
       }
+    } catch (err) {
+      console.error('Coupon validation error:', err);
+      setIsSuccess(false);
+    } finally {
       setIsApplying(false);
-    }, 1000);
+    }
   };
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discountAmount = subtotal * discount;
-  const totalPrice = subtotal - discountAmount;
-  const shipping = totalPrice > 0 ? 9.99 : 0;
+  const calculateTotals = () => {
+    const subtotal = cartItems.reduce(
+      (sum, item) => sum + item.price * item.quantity, 
+      0
+    );
+    
+    const discountAmount = couponDetails 
+      ? couponDetails.discount_type === 'percent' 
+        ? subtotal * (parseFloat(couponDetails.amount) / 100)
+        : parseFloat(couponDetails.amount)
+      : 0;
+    
+    const shippingCost = selectedShipping ? 5.99 : 0; // Simplified shipping cost
+    const totalPrice = subtotal - discountAmount + shippingCost;
+    
+    return {
+      subtotal: subtotal.toFixed(2),
+      discount: discountAmount.toFixed(2),
+      shipping: shippingCost.toFixed(2),
+      total: totalPrice.toFixed(2)
+    };
+  };
+
+  const handleCheckout = async () => {
+    if (cartItems.length === 0) return;
+    
+    // Prepare order data
+    const totals = calculateTotals();
+    const orderData = {
+      payment_method: 'bacs',
+      payment_method_title: 'Direct Bank Transfer',
+      status: 'pending',
+      line_items: cartItems.map(item => ({
+        product_id: item.id,
+        quantity: item.quantity,
+        price: item.price
+      })),
+      shipping_lines: selectedShipping ? [{
+        method_id: selectedShipping.id,
+        method_title: selectedShipping.title,
+        total: totals.shipping
+      }] : [],
+      coupon_lines: couponDetails ? [{
+        code: couponDetails.code,
+        discount: totals.discount
+      }] : [],
+      total: totals.total,
+      customer_note: 'Order placed from website'
+    };
+    
+    try {
+      const response = await createOrder(orderData);
+      console.log('Order created:', response.data);
+      
+      // Clear cart after successful order
+      setCartItems([]);
+      localStorage.removeItem('cart');
+      
+      // Redirect to order confirmation page
+      window.location.href = `/order-confirmation/${response.data.id}`;
+    } catch (err) {
+      console.error('Order creation error:', err);
+      setError('Failed to create order. Please try again.');
+    }
+  };
+
+  // Renamed variables to avoid conflict
+  const { subtotal: cartSubtotal, discount: cartDiscount, shipping: cartShipping, total: cartTotal } = calculateTotals();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading your cart...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md p-8 bg-white rounded-2xl shadow-lg">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h3 className="text-xl font-bold text-gray-800 mt-4">Error Loading Cart</h3>
+          <p className="text-gray-600 mt-2">{error}</p>
+          <button 
+            className="mt-6 bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700"
+            onClick={() => window.location.reload()}
+          >
+            Try Again
+          </button>
+          <Link 
+            to="/" 
+            className="mt-4 inline-block text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            &larr; Back to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white py-16 relative overflow-hidden">
@@ -89,9 +263,12 @@ export default function Cart() {
             <p className="text-gray-600 max-w-md mx-auto mb-8">
               Looks like you haven't added anything to your cart yet. Start shopping to fill it!
             </p>
-            <button className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all">
+            <Link 
+              to="/products" 
+              className="inline-block px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all"
+            >
               Continue Shopping
-            </button>
+            </Link>
           </motion.div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -123,7 +300,7 @@ export default function Cart() {
                     >
                       <div className="flex flex-col sm:flex-row">
                         <div className="flex-shrink-0 mb-4 sm:mb-0 sm:mr-6">
-                          <div className="bg-gray-200 rounded-xl w-24 h-24 flex items-center justify-center overflow-hidden">
+                          <div className="rounded-xl w-24 h-24 flex items-center justify-center overflow-hidden border">
                             <img 
                               src={item.image} 
                               alt={item.name} 
@@ -138,12 +315,18 @@ export default function Cart() {
                               <h3 className="text-lg font-semibold text-gray-800">{item.name}</h3>
                               <div className="flex mt-2 space-x-4">
                                 <div className="flex items-center">
-                                  <span className="text-gray-600 mr-2">Color:</span>
-                                  <span className="font-medium">{item.color}</span>
+                                  <span className="text-gray-600 mr-2">SKU:</span>
+                                  <span className="font-medium">{item.sku}</span>
                                 </div>
                                 <div className="flex items-center">
-                                  <span className="text-gray-600 mr-2">Size:</span>
-                                  <span className="font-medium">{item.size}</span>
+                                  <span className="text-gray-600 mr-2">Status:</span>
+                                  <span className={`font-medium ${
+                                    item.stock_status === 'instock' 
+                                      ? 'text-green-600' 
+                                      : 'text-red-600'
+                                  }`}>
+                                    {item.stock_status === 'instock' ? 'In Stock' : 'Out of Stock'}
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -154,8 +337,9 @@ export default function Cart() {
                           <div className="flex flex-wrap justify-between items-center mt-4">
                             <div className="flex items-center">
                               <button 
-                                onClick={() => handleQuantityChange(item.id, Math.max(1, item.quantity - 1))}
+                                onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
                                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                                disabled={item.quantity <= 1}
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -218,16 +402,16 @@ export default function Cart() {
                     </button>
                   </div>
                   
-                  {isSuccess && (
+                  {isSuccess && couponDetails && (
                     <motion.div 
-                      className="mt-4 text-green-600 font-medium flex items-center"
+                      className="mt-4 p-3 bg-green-50 rounded-lg text-green-700 font-medium flex items-center"
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
-                      Promo code applied! 15% discount added.
+                      {couponDetails.description || `Coupon applied! Discount: ${couponDetails.amount}${couponDetails.discount_type === 'percent' ? '%' : '$'}`}
                     </motion.div>
                   )}
                 </div>
@@ -239,14 +423,22 @@ export default function Cart() {
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.6 }}
               >
-                <button className="px-6 py-3 bg-white text-indigo-600 font-bold rounded-xl border border-indigo-200 hover:bg-indigo-50 transition-colors flex items-center justify-center">
+                <Link 
+                  to="/products" 
+                  className="px-6 py-3 bg-white text-indigo-600 font-bold rounded-xl border border-indigo-200 hover:bg-indigo-50 transition-colors flex items-center justify-center"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
                   </svg>
                   Continue Shopping
-                </button>
+                </Link>
                 
-                <button className="px-6 py-3 bg-white text-gray-600 font-bold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors flex items-center justify-center">
+                <button 
+                  onClick={() => {
+                    // Implement cart update if needed
+                  }}
+                  className="px-6 py-3 bg-white text-gray-600 font-bold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors flex items-center justify-center"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
@@ -268,43 +460,58 @@ export default function Cart() {
                 <div className="space-y-4 mb-6">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Subtotal</span>
-                    <span className="font-medium">${subtotal.toFixed(2)}</span>
+                    <span className="font-medium">${cartSubtotal}</span>
                   </div>
                   
                   <div className="flex justify-between">
                     <span className="text-gray-600">Shipping</span>
-                    <span className="font-medium">${shipping.toFixed(2)}</span>
+                    <span className="font-medium">${cartShipping}</span>
                   </div>
                   
-                  {discount > 0 && (
+                  {parseFloat(cartDiscount) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Discount</span>
-                      <span className="font-medium text-green-600">-${discountAmount.toFixed(2)}</span>
+                      <span className="font-medium text-green-600">-${cartDiscount}</span>
                     </div>
                   )}
                   
                   <div className="flex justify-between text-lg font-bold pt-4 border-t border-gray-200">
                     <span>Total</span>
-                    <span>${(totalPrice + shipping).toFixed(2)}</span>
+                    <span>${cartTotal}</span>
                   </div>
                 </div>
                 
                 <div className="mb-6">
-                  <h3 className="font-semibold text-gray-800 mb-3">Payment Method</h3>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="border-2 border-gray-200 rounded-xl p-3 flex items-center justify-center cursor-pointer hover:border-indigo-400">
-                      <div className="bg-gray-200 border-2 border-dashed rounded-xl w-12 h-8" />
-                    </div>
-                    <div className="border-2 border-gray-200 rounded-xl p-3 flex items-center justify-center cursor-pointer hover:border-indigo-400">
-                      <div className="bg-gray-200 border-2 border-dashed rounded-xl w-12 h-8" />
-                    </div>
-                    <div className="border-2 border-gray-200 rounded-xl p-3 flex items-center justify-center cursor-pointer hover:border-indigo-400">
-                      <div className="bg-gray-200 border-2 border-dashed rounded-xl w-12 h-8" />
-                    </div>
+                  <h3 className="font-semibold text-gray-800 mb-3">Shipping Method</h3>
+                  <div className="space-y-3">
+                    {shippingMethods.map(method => (
+                      <div 
+                        key={method.id}
+                        className={`border-2 rounded-xl p-4 cursor-pointer transition-all ${
+                          selectedShipping?.id === method.id
+                            ? 'border-indigo-600 bg-indigo-50'
+                            : 'border-gray-200 hover:border-indigo-400'
+                        }`}
+                        onClick={() => setSelectedShipping(method)}
+                      >
+                        <div className="flex items-center">
+                          <div className="mr-3">
+                            <div className="bg-gray-200 border-2 border-dashed rounded-xl w-10 h-10" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-800">{method.title}</h4>
+                            <p className="text-sm text-gray-600">${method.settings.cost.value} - {method.settings.delivery_time.value}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 
-                <button className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5">
+                <button 
+                  onClick={handleCheckout}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5"
+                >
                   Proceed to Checkout
                 </button>
                 

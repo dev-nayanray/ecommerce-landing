@@ -1,50 +1,103 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { 
+  getBlogPosts,
+  getPostCategories
+} from '../api/wordpressAPI';
 
 const Blog = () => {
-  const blogPosts = [
-    {
-      id: 1,
-      title: "The Future of E-commerce: Trends to Watch in 2023",
-      excerpt: "Discover the emerging technologies and consumer behaviors shaping online shopping experiences.",
-      date: "May 15, 2023",
-      author: "Alex Morgan",
-      readTime: "6 min read",
-      category: "Industry Insights",
-      image: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=500&q=80",
-      featured: true
-    },
-    {
-      id: 2,
-      title: "10 Sustainable Shopping Practices You Can Start Today",
-      excerpt: "Learn how to make eco-friendly choices without compromising on style or quality.",
-      date: "April 28, 2023",
-      author: "Taylor Green",
-      readTime: "5 min read",
-      category: "Sustainability",
-      image: "https://images.unsplash.com/photo-1465433045946-ba6506ce5a59?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=500&q=80"
-    },
-    {
-      id: 3,
-      title: "How to Style Your Home Office for Productivity and Comfort",
-      excerpt: "Transform your workspace with these ergonomic and aesthetic design tips.",
-      date: "April 12, 2023",
-      author: "Jordan Lee",
-      readTime: "7 min read",
-      category: "Lifestyle",
-      image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=500&q=80"
-    },
-    {
-      id: 4,
-      title: "The Art of Minimalism: Simplifying Your Digital Life",
-      excerpt: "Declutter your digital space and improve your focus with these practical strategies.",
-      date: "March 30, 2023",
-      author: "Casey Smith",
-      readTime: "8 min read",
-      category: "Wellness",
-      image: "https://images.unsplash.com/photo-1555099962-4199c345e5dd?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=500&q=80"
-    }
-  ];
+  const [posts, setPosts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [featuredPost, setFeaturedPost] = useState(null);
+
+  useEffect(() => {
+    const fetchBlogData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch posts and categories simultaneously
+        const [postsResponse, categoriesResponse] = await Promise.all([
+          getBlogPosts(),
+          getPostCategories()
+        ]);
+        
+        // Filter out uncategorized (ID 1)
+        const filteredCategories = categoriesResponse.data.filter(
+          cat => cat.id !== 1 && cat.count > 0
+        );
+        
+        setCategories(filteredCategories);
+        
+        // Transform WordPress posts to our format
+        const transformedPosts = postsResponse.data.map(post => ({
+          id: post.id,
+          title: post.title.rendered,
+          excerpt: post.excerpt.rendered.replace(/<[^>]*>?/gm, '').substring(0, 150) + '...',
+          date: new Date(post.date).toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          }),
+          author: post._embedded?.author?.[0]?.name || 'Admin',
+          readTime: Math.ceil(post.content.rendered.split(/\s+/).length / 200) + ' min read',
+          category: post._embedded?.['wp:term']?.[0]?.[0]?.name || 'Uncategorized',
+          categoryId: post.categories?.[0] || 1,
+          image: post._embedded?.['wp:featuredmedia']?.[0]?.source_url || 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=500&q=80',
+          featured: post.sticky || false
+        }));
+        
+        setPosts(transformedPosts);
+        
+        // Set the first sticky post as featured, or first post if none
+        const stickyPost = transformedPosts.find(post => post.featured);
+        setFeaturedPost(stickyPost || transformedPosts[0]);
+        
+      } catch (err) {
+        console.error('Blog fetch error:', err);
+        setError('Failed to load blog posts');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBlogData();
+  }, []);
+
+  // Filter non-featured posts
+  const recentPosts = posts.filter(post => !post.featured).slice(0, 3);
+
+  if (loading) {
+    return (
+      <section className="py-16 bg-gradient-to-b from-white to-gray-50">
+        <div className="container mx-auto px-4 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading blog posts...</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="py-16 bg-gradient-to-b from-white to-gray-50">
+        <div className="container mx-auto px-4 text-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <h3 className="text-xl font-medium text-gray-800 mt-4">{error}</h3>
+          <button 
+            className="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700"
+            onClick={() => window.location.reload()}
+          >
+            Try Again
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="py-16 bg-gradient-to-b from-white to-gray-50 relative overflow-hidden">
@@ -67,9 +120,8 @@ const Blog = () => {
         
         {/* Featured blog post */}
         <div className="mb-16">
-          {blogPosts.filter(post => post.featured).map(post => (
+          {featuredPost && (
             <motion.div 
-              key={post.id}
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
@@ -77,8 +129,8 @@ const Blog = () => {
             >
               <div className="h-96 lg:h-auto relative">
                 <img 
-                  src={post.image} 
-                  alt={post.title} 
+                  src={featuredPost.image} 
+                  alt={featuredPost.title} 
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute top-6 left-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-1 rounded-full text-sm font-bold">
@@ -87,37 +139,37 @@ const Blog = () => {
               </div>
               
               <div className="p-8 md:p-12 flex flex-col justify-center">
-                <span className="text-indigo-600 font-semibold mb-3">{post.category}</span>
-                <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">{post.title}</h3>
-                <p className="text-gray-600 mb-6">{post.excerpt}</p>
+                <span className="text-indigo-600 font-semibold mb-3">{featuredPost.category}</span>
+                <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">{featuredPost.title}</h3>
+                <p className="text-gray-600 mb-6">{featuredPost.excerpt}</p>
                 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
                     <div className="bg-gray-200 border-2 border-dashed rounded-xl w-10 h-10" />
                     <div className="ml-3">
-                      <div className="font-medium text-gray-900">{post.author}</div>
-                      <div className="text-sm text-gray-500">{post.date} · {post.readTime}</div>
+                      <div className="font-medium text-gray-900">{featuredPost.author}</div>
+                      <div className="text-sm text-gray-500">{featuredPost.date} · {featuredPost.readTime}</div>
                     </div>
                   </div>
                   
-                  <a 
-                    href="#"
+                  <Link 
+                    to={`/blog/${featuredPost.id}`}
                     className="text-indigo-600 font-semibold hover:text-indigo-800 transition-colors flex items-center"
                   >
                     Read more
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
-                  </a>
+                  </Link>
                 </div>
               </div>
             </motion.div>
-          ))}
+          )}
         </div>
         
         {/* Recent posts grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {blogPosts.filter(post => !post.featured).map((post, index) => (
+          {recentPosts.map((post, index) => (
             <motion.div
               key={post.id}
               initial={{ opacity: 0, y: 30 }}
@@ -150,29 +202,42 @@ const Blog = () => {
                     <span className="ml-2 text-sm font-medium text-gray-900">{post.author}</span>
                   </div>
                   
-                  <a 
-                    href="#"
+                  <Link 
+                    to={`/blog/${post.id}`}
                     className="text-indigo-600 hover:text-indigo-800 transition-colors flex items-center text-sm"
                   >
                     Read
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
-                  </a>
+                  </Link>
                 </div>
               </div>
             </motion.div>
           ))}
         </div>
         
+        {/* Categories filter */}
+        <div className="flex flex-wrap justify-center gap-3 mt-12">
+          {categories.map(category => (
+            <Link 
+              key={category.id}
+              to={`/blog/category/${category.id}`}
+              className="px-4 py-2 bg-gray-100 text-gray-800 rounded-full hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
+            >
+              {category.name}
+            </Link>
+          ))}
+        </div>
+        
         {/* View all button */}
-        <div className="text-center mt-16">
-          <a 
-            href="#" 
+        <div className="text-center mt-8">
+          <Link 
+            to="/blog" 
             className="inline-block px-8 py-3.5 text-base font-semibold text-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
           >
             View All Articles
-          </a>
+          </Link>
         </div>
       </div>
       

@@ -66,23 +66,7 @@ export default function Categories() {
   return (
     <section className="py-16 bg-gradient-to-b from-white to-gray-50">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-12">
-          <motion.h2 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-3xl md:text-4xl font-bold text-gray-800 mb-4"
-          >
-            Shop by Category
-          </motion.h2>
-          <motion.p 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="text-gray-600 max-w-2xl mx-auto"
-          >
-            Discover products curated for your needs
-          </motion.p>
-        </div>
+       
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {categories.map((cat, index) => (

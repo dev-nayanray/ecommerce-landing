@@ -17,10 +17,14 @@ import Product from './pages/Product';
 import Category from './pages/Category';
 import Contact from './pages/Contact';
 import TermsPrivacy from './pages/TermsPrivacy';
+import Returnpolicy from './pages/Returnpolicy';
+import AboutUs from './pages/AboutUs';
+import FAQPage from './pages/FAQ';
 import Shop from './pages/Shop';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import UserProfile from './pages/UserProfile';
+import SingleProduct from './pages/SingleProduct';
 
 function Home() {
   return (
@@ -34,9 +38,9 @@ function Home() {
       <Testimonials />
       <Partners />
       <Video />
-      <Blog />
+      <Blog homeView={true} />
       <Newsletter />
-      <FAQ />
+      <FAQ homeView={true} />
       <UserCounts />
     </>
   );
@@ -57,6 +61,10 @@ function App() {
           <Route path="/profile" element={<UserProfile />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/terms-privacy" element={<TermsPrivacy />} />
+          <Route path="/return-policy" element={<Returnpolicy />} />
+          <Route path="/about-us" element={<AboutUs />} />
+          <Route path="/faq" element={<FAQPage />} />
+          <Route path="/product/:id" element={<SingleProduct />} />
         </Routes>
         <Footer />
       </div>

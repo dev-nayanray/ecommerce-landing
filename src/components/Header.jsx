@@ -10,7 +10,8 @@ export default function Header() {
   const [activeDropdown, setActiveDropdown] = useState(null);
   
   const megaMenuRef = useRef(null);
-  const dropdownRef = useRef(null);
+  const cartRef = useRef(null);
+  const accountRef = useRef(null);
 
   // Add shadow on scroll
   useEffect(() => {
@@ -21,14 +22,22 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close mega menus/dropdowns when clicking outside
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
+      // Close mega menus
       if (megaMenuRef.current && !megaMenuRef.current.contains(event.target)) {
         setActiveMegaMenu(null);
       }
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setActiveDropdown(null);
+      
+      // Close cart
+      if (cartRef.current && !cartRef.current.contains(event.target)) {
+        setIsCartOpen(false);
+      }
+      
+      // Close account dropdown
+      if (accountRef.current && !accountRef.current.contains(event.target)) {
+        setIsAccountOpen(false);
       }
     };
     
@@ -134,34 +143,29 @@ export default function Header() {
       name: 'Pages', 
       to: '/pages',
       dropdown: [
-        { name: 'About Us', to: '/about' },
+        { name: 'About Us', to: '/about-us' },
         { name: 'Contact', to: '/contact' },
         { name: 'FAQs', to: '/faqs' },
         { name: 'Terms & Privacy', to: '/terms-privacy' },
         { name: 'Return Policy', to: '/return-policy' },
       ]
     },
-    { 
-      name: 'Account', 
-      to: '/account',
-      dropdown: [
-        { name: 'My Account', to: '/account' },
-        { name: 'Orders', to: '/orders' },
-        { name: 'Wishlist', to: '/wishlist' },
-        { name: 'Addresses', to: '/addresses' },
-        { name: 'Payment Methods', to: '/payment-methods' },
-        { name: 'Logout', to: '/logout', action: () => alert('Logged out') },
-      ]
-    },
+     
     { name: 'Cart', to: '/cart' },
     { name: 'Checkout', to: '/checkout' },
   ];
 
-  // Demo cart items for popup
-  const cartItems = [
-    { id: 1, name: 'Wireless Bluetooth Headphones', price: 129.99, quantity: 1 },
-    { id: 2, name: 'Smart Fitness Watch Pro', price: 199.99, quantity: 2 },
-  ];
+  // TODO: Replace demo cart items with dynamic cart state from context or API
+  const [cartItems, setCartItems] = useState([]);
+
+  useEffect(() => {
+    // Fetch or subscribe to cart state here
+    // For demo, using static items
+    setCartItems([
+      { id: 1, name: 'Wireless Bluetooth Headphones', price: 129.99, quantity: 1 },
+      { id: 2, name: 'Smart Fitness Watch Pro', price: 199.99, quantity: 2 },
+    ]);
+  }, []);
 
   const totalPrice = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -171,7 +175,9 @@ export default function Header() {
       setActiveMegaMenu(null);
     } else {
       setActiveMegaMenu(menuName);
-      setActiveDropdown(null); // Close dropdowns when opening mega menu
+      setActiveDropdown(null);
+      setIsCartOpen(false);
+      setIsAccountOpen(false);
     }
   };
 
@@ -181,7 +187,9 @@ export default function Header() {
       setActiveDropdown(null);
     } else {
       setActiveDropdown(dropdownName);
-      setActiveMegaMenu(null); // Close mega menus when opening dropdown
+      setActiveMegaMenu(null);
+      setIsCartOpen(false);
+      setIsAccountOpen(false);
     }
   };
 
@@ -211,7 +219,7 @@ export default function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-1 relative" ref={megaMenuRef}>
             {navItems.map((item) => (
-              <div key={item.name} className="relative group">
+              <div key={item.name} className="relative">
                 {item.megaMenu ? (
                   <div className="relative">
                     <button
@@ -221,6 +229,7 @@ export default function Header() {
                           : (activeMegaMenu === item.name ? 'bg-indigo-800 text-white' : 'text-white hover:bg-indigo-800')
                       }`}
                       onClick={() => toggleMegaMenu(item.name)}
+                      aria-expanded={activeMegaMenu === item.name}
                     >
                       {item.name}
                       <svg 
@@ -260,7 +269,7 @@ export default function Header() {
                                     <li key={itemIndex}>
                                       <Link 
                                         to={menuItem.to} 
-                                        className="text-gray-600 hover:text-indigo-600 block py-1"
+                                        className="text-gray-600 hover:text-indigo-600 block py-1 transition-colors"
                                         onClick={closeAllMenus}
                                       >
                                         {menuItem.name}
@@ -277,17 +286,17 @@ export default function Header() {
                             <div className="w-1/3 pl-6 border-l border-gray-200">
                               <Link 
                                 to={item.megaMenu.featured.to} 
-                                className="block group"
+                                className="block group transition-transform hover:scale-[1.02]"
                                 onClick={closeAllMenus}
                               >
                                 <div className="bg-gray-100 rounded-lg overflow-hidden mb-4">
-                                  <div className="bg-gray-200 border-2 border-dashed w-full h-32" />
+                                  <div className="bg-gray-200 border-2 border-dashed rounded-xl w-full h-32" />
                                 </div>
-                                <h4 className="font-bold text-lg text-gray-900 group-hover:text-indigo-600 mb-2">
+                                <h4 className="font-bold text-lg text-gray-900 group-hover:text-indigo-600 mb-2 transition-colors">
                                   {item.megaMenu.featured.title}
                                 </h4>
                                 <p className="text-gray-600 mb-3">{item.megaMenu.featured.description}</p>
-                                <span className="text-indigo-600 font-medium">Shop Now →</span>
+                                <span className="text-indigo-600 font-medium group-hover:text-indigo-800 transition-colors">Shop Now →</span>
                               </Link>
                             </div>
                           )}
@@ -296,7 +305,7 @@ export default function Header() {
                     )}
                   </div>
                 ) : item.dropdown ? (
-                  <div className="relative" ref={dropdownRef}>
+                  <div className="relative">
                     <button
                       className={`font-medium px-4 py-2 rounded-lg transition-colors flex items-center ${
                         isScrolled 
@@ -304,6 +313,7 @@ export default function Header() {
                           : (activeDropdown === item.name ? 'bg-indigo-800 text-white' : 'text-white hover:bg-indigo-800')
                       }`}
                       onClick={() => toggleDropdown(item.name)}
+                      aria-expanded={activeDropdown === item.name}
                     >
                       {item.name}
                       <svg 
@@ -326,7 +336,7 @@ export default function Header() {
                             <li key={index}>
                               {dropdownItem.action ? (
                                 <button
-                                  className="block w-full text-left px-4 py-3 text-gray-700 hover:bg-indigo-50"
+                                  className="block w-full text-left px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
                                   onClick={() => {
                                     closeAllMenus();
                                     dropdownItem.action();
@@ -337,7 +347,7 @@ export default function Header() {
                               ) : (
                                 <Link
                                   to={dropdownItem.to}
-                                  className="block px-4 py-3 text-gray-700 hover:bg-indigo-50"
+                                  className="block px-4 py-3 text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
                                   onClick={closeAllMenus}
                                 >
                                   {dropdownItem.name}
@@ -372,9 +382,9 @@ export default function Header() {
               <input
                 type="text"
                 placeholder="Search products..."
-                className="w-full py-2 px-4 rounded-full border focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                className="w-full py-2 px-4 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
               />
-              <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">
+              <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-indigo-600 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -383,7 +393,7 @@ export default function Header() {
           </div>
 
           {/* Action Icons */}
-          <div className="flex items-center space-x-5 relative">
+          <div className="flex items-center space-x-5">
             {/* Search Icon (Mobile) */}
             <button className="md:hidden p-1">
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${isScrolled ? 'text-gray-700' : 'text-white'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -392,63 +402,67 @@ export default function Header() {
             </button>
 
             {/* Cart Icon */}
-            <button 
-              className={`p-1 relative ${isScrolled ? 'text-gray-700' : 'text-white'}`}
-              onClick={() => {
-                setIsCartOpen(!isCartOpen);
-                setActiveMegaMenu(null);
-                setActiveDropdown(null);
-              }}
-              aria-label="Toggle cart popup"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {cartItems.length}
-              </span>
-            </button>
+            <div className="relative" ref={cartRef}>
+              <button 
+                className={`p-1 relative ${isScrolled ? 'text-gray-700' : 'text-white'}`}
+                onClick={() => {
+                  setIsCartOpen(!isCartOpen);
+                  setActiveMegaMenu(null);
+                  setActiveDropdown(null);
+                  setIsAccountOpen(false);
+                }}
+                aria-label="Toggle cart popup"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {cartItems.length}
+                </span>
+              </button>
 
-            {/* Cart Popup */}
-            {isCartOpen && (
-              <div className="absolute right-0 top-[50px] w-96 bg-white rounded-2xl shadow-2xl border border-gray-300 p-6 z-50 animate-fadeIn">
-                <h3 className="text-xl font-bold mb-6 border-b border-gray-200 pb-3">Cart Items</h3>
-                {cartItems.length === 0 ? (
-                  <p className="text-gray-600">Your cart is empty.</p>
-                ) : (
-                  <ul className="divide-y divide-gray-200 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-indigo-400 scrollbar-track-gray-100">
-                    {cartItems.map(item => (
-                      <li key={item.id} className="flex justify-between py-3">
-                        <span className="font-medium text-gray-800">{item.name} x {item.quantity}</span>
-                        <span className="font-semibold text-indigo-600">${(item.price * item.quantity).toFixed(2)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="mt-6 flex justify-between font-extrabold text-indigo-700 text-lg">
-                  <span>Total:</span>
-                  <span>${totalPrice.toFixed(2)}</span>
+              {/* Cart Popup */}
+              {isCartOpen && (
+                <div className="absolute right-0 top-full mt-2 w-96 bg-white rounded-2xl shadow-2xl border border-gray-300 p-6 z-50 animate-fadeIn">
+                  <h3 className="text-xl font-bold mb-6 border-b border-gray-200 pb-3">Cart Items</h3>
+                  {cartItems.length === 0 ? (
+                    <p className="text-gray-600">Your cart is empty.</p>
+                  ) : (
+                    <ul className="divide-y divide-gray-200 max-h-72 overflow-y-auto scrollbar-thin scrollbar-thumb-indigo-400 scrollbar-track-gray-100">
+                      {cartItems.map(item => (
+                        <li key={item.id} className="flex justify-between py-3">
+                          <span className="font-medium text-gray-800">{item.name} x {item.quantity}</span>
+                          <span className="font-semibold text-indigo-600">${(item.price * item.quantity).toFixed(2)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-6 flex justify-between font-extrabold text-indigo-700 text-lg">
+                    <span>Total:</span>
+                    <span>${totalPrice.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-6 text-center">
+                    <Link
+                      to="/cart"
+                      className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-2xl hover:bg-indigo-700 transition-colors font-semibold"
+                      onClick={closeAllMenus}
+                    >
+                      View Cart
+                    </Link>
+                  </div>
                 </div>
-                <div className="mt-6 text-center">
-                  <Link
-                    to="/cart"
-                    className="inline-block bg-indigo-600 text-white px-8 py-3 rounded-2xl hover:bg-indigo-700 transition-colors font-semibold"
-                    onClick={closeAllMenus}
-                  >
-                    View Cart
-                  </Link>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Account Icon */}
-            <div className="relative">
+            <div className="relative" ref={accountRef}>
               <button
                 className={`flex items-center space-x-1 ${isScrolled ? 'text-gray-700' : 'text-white'}`}
                 onClick={() => {
                   setIsAccountOpen(!isAccountOpen);
                   setActiveMegaMenu(null);
                   setActiveDropdown(null);
+                  setIsCartOpen(false);
                 }}
                 aria-label="Toggle account menu"
               >
@@ -458,16 +472,16 @@ export default function Header() {
 
               {/* Account Dropdown */}
               {isAccountOpen && (
-                <div className="absolute right-0 mt-12 w-48 bg-white rounded-lg shadow-lg border border-gray-200 p-4 z-50">
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-50">
                   <Link
                     to="/profile"
-                    className="block px-4 py-2 text-gray-700 hover:bg-indigo-100 rounded"
+                    className="block px-4 py-2 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700 rounded transition-colors"
                     onClick={closeAllMenus}
                   >
                     Profile
                   </Link>
                   <button
-                    className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-indigo-100 rounded"
+                    className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700 rounded transition-colors"
                     onClick={() => {
                       closeAllMenus();
                       alert('Logout clicked (placeholder)');
@@ -484,6 +498,7 @@ export default function Header() {
           <button 
             className="md:hidden ml-4 p-2"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="Toggle mobile menu"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${isScrolled ? 'text-gray-700' : 'text-white'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               {isMenuOpen ? (
@@ -502,7 +517,7 @@ export default function Header() {
           <input
             type="text"
             placeholder="Search products..."
-            className="w-full py-3 px-4 rounded-full border focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            className="w-full py-3 px-4 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
           />
           <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -529,6 +544,7 @@ export default function Header() {
                           setActiveDropdown(item.name);
                         }
                       }}
+                      aria-expanded={activeDropdown === item.name}
                     >
                       {item.name}
                       <svg 
@@ -555,7 +571,7 @@ export default function Header() {
                                     <li key={itemIndex}>
                                       <Link 
                                         to={menuItem.to} 
-                                        className="text-gray-600 hover:text-indigo-600 block py-1"
+                                        className="text-gray-600 hover:text-indigo-600 block py-1 transition-colors"
                                         onClick={closeAllMenus}
                                       >
                                         {menuItem.name}
@@ -573,9 +589,9 @@ export default function Header() {
                                   onClick={closeAllMenus}
                                 >
                                   <div className="bg-gray-100 rounded-lg overflow-hidden mb-3">
-                                    <div className="bg-gray-200 border-2 border-dashed w-full h-24" />
+                                    <div className="bg-gray-200 border-2 border-dashed rounded-xl w-full h-24" />
                                   </div>
-                                  <h4 className="font-bold text-gray-900 group-hover:text-indigo-600 mb-1">
+                                  <h4 className="font-bold text-gray-900 group-hover:text-indigo-600 mb-1 transition-colors">
                                     {item.megaMenu.featured.title}
                                   </h4>
                                   <p className="text-gray-600 text-sm">{item.megaMenu.featured.description}</p>
@@ -589,7 +605,7 @@ export default function Header() {
                               <li key={index}>
                                 {dropdownItem.action ? (
                                   <button
-                                    className="block w-full text-left py-2 text-gray-600"
+                                    className="block w-full text-left py-2 text-gray-600 hover:text-indigo-600 transition-colors"
                                     onClick={() => {
                                       closeAllMenus();
                                       dropdownItem.action();
@@ -600,7 +616,7 @@ export default function Header() {
                                 ) : (
                                   <Link
                                     to={dropdownItem.to}
-                                    className="block py-2 text-gray-600 hover:text-indigo-600"
+                                    className="block py-2 text-gray-600 hover:text-indigo-600 transition-colors"
                                     onClick={closeAllMenus}
                                   >
                                     {dropdownItem.name}
@@ -616,7 +632,7 @@ export default function Header() {
                 ) : (
                   <Link
                     to={item.to}
-                    className="block py-3 text-gray-700 font-medium"
+                    className="block py-3 text-gray-700 font-medium hover:text-indigo-600 transition-colors"
                     onClick={closeAllMenus}
                   >
                     {item.name}
